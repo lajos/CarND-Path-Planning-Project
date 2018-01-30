@@ -8,6 +8,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
+#include "spline.h"
 
 using namespace std;
 
@@ -161,7 +162,11 @@ int main() {
 	vector<double> map_waypoints_dy;
 
 	// Waypoint map to read from
+#ifdef UWS_VCPKG
+	string map_file_ = "data/highway_map.csv";
+#else
 	string map_file_ = "../data/highway_map.csv";
+#endif
 	// The max s value before wrapping around the track back to 0
 	double max_s = 6945.554;
 
@@ -187,11 +192,17 @@ int main() {
 		map_waypoints_dy.push_back(d_y);
 	}
 
+	// default lane
+	int lane = 1;
+
+	// reference speed
+	double ref_vel = 49.5;    //mph
+
 #ifdef UWS_VCPKG
-	h.onMessage([&map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
+	h.onMessage([&map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy, &lane, &ref_vel](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length,
 	uWS::OpCode opCode) {
 #else
-	h.onMessage([&map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+	h.onMessage([&map_waypoints_x, &map_waypoints_y, &map_waypoints_s, &map_waypoints_dx, &map_waypoints_dy, &lane, &ref_vel](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
 	uWS::OpCode opCode) {
 #endif
 		// "42" at the start of the message means there's a websocket message event.
@@ -231,11 +242,89 @@ int main() {
 
 					json msgJson;
 
+					size_t prev_size = previous_path_x.size();
+
+					//if (prev_size > 0) {
+					//	car_s = end_path_s;
+					//}
+
+					// create a vector of widely spaced (x,y) waypoints
+					vector<double> ptsx;
+					vector<double> ptsy;
+
+					// reference x, y, yaw
+					double ref_x = car_x;
+					double ref_y = car_y;
+					double ref_yaw = deg2rad(car_yaw);
+
+
+					if (prev_size < 2) {
+						double prev_car_x = car_x = cos(car_yaw);
+						double prev_car_y = car_y = sin(car_yaw);
+
+						ptsx.push_back(prev_car_x);
+						ptsx.push_back(car_x);
+
+						ptsx.push_back(prev_car_y);
+						ptsx.push_back(car_y);
+					} else {
+						ref_x = previous_path_x[prev_size - 1];
+						ref_y = previous_path_y[prev_size - 1];
+
+						double ref_x_prev = previous_path_x[prev_size - 2];
+						double ref_y_prev = previous_path_y[prev_size - 2];
+
+						ref_yaw = atan2(ref_y - ref_y_prev, ref_x - ref_x_prev);
+
+						ptsx.push_back(ref_x_prev);
+						ptsx.push_back(ref_x);
+
+						ptsy.push_back(ref_y_prev);
+						ptsy.push_back(ref_y);
+					}
+
+
+					vector<double> next_wp0 = getXY(car_s + 30, 2 + 4 * lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+					vector<double> next_wp1 = getXY(car_s + 60, 2 + 4 * lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+					vector<double> next_wp2 = getXY(car_s + 90, 2 + 4 * lane, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+					ptsx.push_back(next_wp0[0]);
+					ptsx.push_back(next_wp1[0]);
+					ptsx.push_back(next_wp2[0]);
+
+					ptsy.push_back(next_wp0[1]);
+					ptsy.push_back(next_wp1[1]);
+					ptsy.push_back(next_wp2[1]);
+
+					for (size_t i = 0; i < ptsx.size(); ++i) {
+						// shift car reference angle to 0
+						double shift_x = ptsx[i] - ref_x;
+						double shift_y = ptsy[i] - ref_y;
+
+						ptsx[i] = shift_x * cos(-ref_yaw) - shift_y * sin(-ref_yaw);
+						ptsy[i] = shift_x * sin(-ref_yaw) + shift_y * cos(-ref_yaw);
+					}
+
+					// create a spline
+					tk::spline s;
+
+					// spline over ptsx,ptsy
+					s.set_points(ptsx, ptsy);
+
+					// points to the planner
 					vector<double> next_x_vals;
 					vector<double> next_y_vals;
 
+					// starts with previous points
+					for (size_t i = 0; i < previous_path_x.size(); ++i) {
+						next_x_vals.push_back(previous_path_x[i]);
+						next_y_vals.push_back(previous_path_y[i]);
+					}
 
-					// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+
+					30: 32
+
+
 					msgJson["next_x"] = next_x_vals;
 					msgJson["next_y"] = next_y_vals;
 
