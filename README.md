@@ -1,70 +1,89 @@
 # CarND-Path-Planning-Project
 Self-Driving Car Engineer Nanodegree Program
 
+![path planning](writeup/screen1.png)
+
 ### Goals
 The goal of this project is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. The simulator provides the car's localization and sensor fusion data. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
 
-#### Highway Map
+### Frenet Coordinates
+
+Planning a trajectory in Cartesian coordinates is challenging, so instead we'll be using Frenet coordinates:
+
+  * **s** - position along the road (longitudinal position)
+  * **d** - side to side position (lateral position)
+
+In the Frenet space the curvature of the road is ignored, so the trajectory can be planned as if the road was straight. The planned trajectory is then transferred back to the Cartesian space.
+
+![cartesian vs frenet](writeup/frenet.png)
+
+### Highway Map
 There is a list of waypoints provided around the simulated track. Each waypoint has [x,y,s,dx,dy] values.
   * **[x, y]** - the waypoint's position
   * **s** - distance along the road [in meters]
   * **[dx, dy]** - unit normal vector pointing outward of the highway loop
 
-The highway's waypoints loop around so the frenet s value, distance along the road, goes from 0 to 6945.554.
+The highway's waypoints loop around so the Frenet s value, distance along the road, goes from 0 to 6945.554.
 
-## Basic Build Instructions
+![waypoints](writeup/waypoints.png)
+
+### Car Localization Data
+
+The simulator sends the following localization data for our car:
+
+  * **[x, y]** - position in map coordinates (Cartesian)
+  * **[s, d]** - position in Frenet coordinates
+  * **yaw** - yaw angle (heading)
+  * **speed** - speed in MPH
+
+### Sensor Fusion Data
+
+The simulator provides sensor fusion data for other cars on the road, including their position in map and Frenet coordinates and their speed in.
+
+---
+
+## Path Planning
+
+Our goal is to drive as fast as possible within the speed limit while avoiding collisions with other cars on the road. To achieve this the car should:
+
+  * Increase speed up to the limit if there are no cars ahead in its lane
+  * Slow down to match the speed of the car in its lane if within a certain distance
+  * Pick a different lane if there is a faster lane available and changing to that lane is safe
+
+### Lane Selection
+
+My method calculates a cost for each lane:
+
+  * A large cost is added if there is another car too close to avoid collision
+  * When approaching a car, add a cost proportinal to speed difference, and inversely proportional to the distance to the other car
+  * Determine the speed of the lane by looking ahead to the closest car within a larger range and add a cost proportinal to the difference between our target speed (speed limit) and the lane speed
+  * Add a small cost for lane change and a larger cost to discourage double lane change
+  * Add a large cost to lanes other then the selected lane bwhile changing lanes to prohibit the car from selecting another lane while changing lanes
+
+After calculating all lane costs, the lane with the lowest cost is selected. The speed is adjusted to match the car driving in front, or to the speed limit if the lane is open.
+
+### Creating a Smooth Trajectory
+
+While creating a trajectory we have to make sure that there are no sudden changes in direction. Simply connecting points with a straight line would create an uncomfortable driving experience ("jerks" at **P2** and **P3** on the illustration below). Instead a spline is fit over anchor points along the trajectory using a [spline library](http://kluge.in-chemnitz.de/opensource/spline/), resulting in a smooth path.
+
+![spline fit](writeup/spline_fit.png)
+
+---
+
+## Future Improvements
+
+  * Use a more robust method instead of spline parameter tuning to detect and avoid "jerks".
+  * Implement an algorythm like Hybrid A* to find the most optimum path.
+  * Currently the car can get stuck following a car if there is another car driving next to it in the neighboring lane. Slowing down to let the car in the next lane go could allow a lane change that might eventually result in the ability to pick a faster lane.
+
+---
+
+## Build Instructions
 
 1. Clone this repo.
 2. Make a build directory: `mkdir build && cd build`
 3. Compile: `cmake .. && make`
 4. Run it: `./path_planning`.
-
-Here is the data provided from the Simulator to the C++ Program
-
-#### Main car's localization Data (No Noise)
-
-["x"] The car's x position in map coordinates
-
-["y"] The car's y position in map coordinates
-
-["s"] The car's s position in frenet coordinates
-
-["d"] The car's d position in frenet coordinates
-
-["yaw"] The car's yaw angle in the map
-
-["speed"] The car's speed in MPH
-
-#### Previous path data given to the Planner
-
-//Note: Return the previous list but with processed points removed, can be a nice tool to show how far along
-the path has processed since last time.
-
-["previous_path_x"] The previous list of x points previously given to the simulator
-
-["previous_path_y"] The previous list of y points previously given to the simulator
-
-#### Previous path's end s and d values
-
-["end_path_s"] The previous list's last point's frenet s value
-
-["end_path_d"] The previous list's last point's frenet d value
-
-#### Sensor Fusion Data, a list of all other car's attributes on the same side of the road. (No Noise)
-
-["sensor_fusion"] A 2d vector of cars and then that car's [car's unique ID, car's x position in map coordinates, car's y position in map coordinates, car's x velocity in m/s, car's y velocity in m/s, car's s position in frenet coordinates, car's d position in frenet coordinates.
-
-## Details
-
-1. The car uses a perfect controller and will visit every (x,y) point it recieves in the list every .02 seconds. The units for the (x,y) points are in meters and the spacing of the points determines the speed of the car. The vector going from a point to the next point in the list dictates the angle of the car. Acceleration both in the tangential and normal directions is measured along with the jerk, the rate of change of total Acceleration. The (x,y) point paths that the planner recieves should not have a total acceleration that goes over 10 m/s^2, also the jerk should not go over 50 m/s^3. (NOTE: As this is BETA, these requirements might change. Also currently jerk is over a .02 second interval, it would probably be better to average total acceleration over 1 second and measure jerk from that.
-
-2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
-
-## Tips
-
-A really helpful resource for doing this project and creating smooth trajectories was using http://kluge.in-chemnitz.de/opensource/spline/, the spline function is in a single hearder file is really easy to use.
-
----
 
 ## Dependencies
 
@@ -86,55 +105,4 @@ A really helpful resource for doing this project and creating smooth trajectorie
     cd uWebSockets
     git checkout e94b6e1
     ```
-
-## Editor Settings
-
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
-
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
-
-## Code Style
-
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
-
-## Project Instructions and Rubric
-
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
-
-
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
 

@@ -339,12 +339,12 @@ int main() {
 
 					int min_cost_lane = distance(lane_cost.begin(), min_element(lane_cost.begin(), lane_cost.end()));
 
-					cout << "current speed: " << ref_vel << endl;
-					cout << "current s:" << car_s << endl;
-					cout << "current lane: " << lane << endl;
-					cout << "chosen lane: " << min_cost_lane << endl;
-					cout << "lane costs: " << int(lane_cost[0]) << " " << int(lane_cost[1]) << " " << int(lane_cost[2]) << " " << endl;
-					cout << "lane speed: " << lane_speed[0] << " " << lane_speed[1] << " " << lane_speed[2] << " " << endl;
+					cout << "current speed : " << ref_vel << endl;
+					cout << "current s     :" << car_s << endl;
+					cout << "current lane  : " << lane << endl;
+					cout << "selected lane : " << min_cost_lane << endl;
+					cout << "lane costs    : " << int(lane_cost[0]) << " " << int(lane_cost[1]) << " " << int(lane_cost[2]) << " " << endl;
+					cout << "lane speeds   : " << lane_speed[0] << " " << lane_speed[1] << " " << lane_speed[2] << " " << endl;
 					cout << endl;
 
 					lane = min_cost_lane;
