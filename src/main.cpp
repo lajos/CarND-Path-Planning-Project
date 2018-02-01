@@ -26,6 +26,11 @@ double rad2deg(double x) { return x * 180 / pi(); }
 #define NUM_LANES 3				// number of lanes
 #define TARGET_VELOCITY 49.5	// target velocity
 #define MAX_S 6945.554			// track length
+#define MS_TO_MPH 2.23694		// m/s to mph multiplier
+
+// converstion between mph and m/s
+double ms2mph(double x) { return x * MS_TO_MPH;  }
+double mph2ms(double x) { return x / MS_TO_MPH; }
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -279,6 +284,7 @@ int main() {
 						double vx = sensor_fusion[i][3];
 						double vy = sensor_fusion[i][4];
 						double o_speed = sqrt(pow(vx, 2) + pow(vy, 2));			// speed of the other car
+						double o_speed_mph = ms2mph(o_speed);
 						double o_car_s = sensor_fusion[i][5];					// frenet s of other car
 						double o_d = sensor_fusion[i][6];						// frenet d of other car
 
@@ -288,7 +294,7 @@ int main() {
 						double o_distance = o_car_s - car_s;
 
 						// is the other car too close?
-						if (o_distance < 15 && o_distance > -7 && o_lane != lane) {
+						if (o_distance < 12 && o_distance > -7 && o_lane != lane) {
 							//cout << lane << " " << o_lane << " " << car_s << " " << o_car_s << endl;
 							lane_cost[o_lane] += 1000;
 						}
@@ -300,15 +306,17 @@ int main() {
 							lane_cost[o_lane] += 5 * (car_speed - o_speed);
 						}
 
-						if (o_distance > 0 && o_distance < 25) {
-							lane_speed[o_lane] = o_speed * 2.24;
+						// speed of lane
+						if (o_distance > 0 && lane_speed[o_lane] > o_speed_mph) {
+							if (o_distance < 25) {						// all lanes
+								lane_speed[o_lane] = o_speed_mph;
+							}
+							if (o_lane != lane && o_distance < 80) {   // lookahead for lanes other than ours
+								lane_speed[o_lane] = o_speed_mph;
+							}
 						}
 
 
-						//double o_car_s_pred = o_car_s + .02 * prev_size * o_speed; // predict other car's position at end of our planned path
-						//if ((o_car_s > car_s) && (o_car_s_pred - car_s < 30)) {  // if car is in front  and it's distance is inside planned path
-						//	lane_speed[o_lane] = o_speed * 2.24;
-						//}
 					}
 
 					// large cost for lane change
@@ -429,9 +437,9 @@ int main() {
 						if (ref_vel < lane_speed[lane]) {
 							ref_vel += .2;
 						} else {
-							ref_vel -= .3;
+							ref_vel -= .4;
 						}
-						double N = target_dist / (0.02 * ref_vel / 2.24);  // 2.24 mph->m/s, car visits a point every 0.02 seconds
+						double N = target_dist / (0.02 * mph2ms(ref_vel));  // car visits a point every 0.02 seconds
 						double x_point = x_add_on + target_x / N;
 						double y_point = s(x_point);
 
